@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPLD 簡易數位碼表硬體邏輯模擬器</title>
+    <style>
+        :root {
+            --bg-color: #0b0d16;
+            --card-bg: #151926;
+            --panel-bg: #0e111a;
+            --accent-color: #528bff;
+            --text-main: #f0f3f6;
+            --text-sub: #7d8da4;
+            --border-color: #242b3d;
+            
+            /* 七段顯示器發光顏色 */
+            --seg-off: #200808;
+            --seg-on: #ff3b30;
+            --seg-glow: rgba(255, 59, 48, 0.65);
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0 0 6px 0;
+            font-size: 26px;
+            background: linear-gradient(135deg, #528bff, #3bc5ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: var(--text-sub);
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 24px;
+            max-width: 1200px;
+            width: 100%;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        /* 實驗開發板主體 */
+        .board-card {
+            background-color: var(--card-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 24px;
+            padding: 28px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 480px;
+            position: relative;
+        }
+
+        .board-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #4e5a78;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            border: 1px solid #242b3d;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(0,0,0,0.2);
+        }
+
+        /* 實體 4位數七段顯示器模組 */
+        .display-module {
+            background-color: #05060a;
+            border: 3px solid #3c4556;
+            border-radius: 12px;
+            padding: 20px 25px;
+            display: flex;
+            gap: 15px;
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.8), 0 4px 10px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        /* 單個七段顯示器外殼 */
+        .digit-container {
+            position: relative;
+            width: 60px;
+            height: 100px;
+        }
+
+        /* SVG 精細七段顯示器段落繪製 */
+        .digit-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .seg-path {
+            fill: var(--seg-off);
+            transition: fill 0.05s ease;
+        }
+
+        .seg-path.active {
+            fill: var(--seg-on);
+            filter: drop-shadow(0px 0px 4px var(--seg-glow));
+        }
+
+        /* COM 導通指示燈 */
+        .com-indicator {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #222530;
+            transition: background-color 0.1s;
+        }
+        .com-indicator.active {
+            background-color: #a3be8c;
+            box-shadow: 0 0 8px #a3be8c;
+        }
+
+        /* 麵包板觸控按鍵 (Tactile Buttons) */
+        .buttons-section {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 15px;
+            gap: 15px;
+        }
+
+        .tactile-button-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tactile-button {
+            width: 44px;
+            height: 44px;
+            background: radial-gradient(circle, #3e4451, #1e222b);
+            border: 3px solid #2d3139;
+            border-radius: 50%;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 6px 0 #111318, 0 8px 15px rgba(0,0,0,0.4);
+            transition: all 0.1s ease;
+        }
+
+        .tactile-button:active, .tactile-button.pressed {
+            box-shadow: 0 1px 0 #111318, 0 2px 5px rgba(0,0,0,0.4);
+            transform: translateY(5px);
+            background: radial-gradient(circle, #2d3139, #111318);
+        }
+
+        /* 金屬蓋板效果 */
+        .tactile-button::before {
+            content: '';
+            position: absolute;
+            top: 6px; left: 6px; right: 6px; bottom: 6px;
+            background-color: #df5b5b; /* 預設紅 */
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn-s1::before { background-color: #2ecc71; } /* 開始：綠 */
+        .btn-s2::before { background-color: #f1c40f; } /* 暫停：黃 */
+        .btn-s3::before { background-color: #e74c3c; } /* 歸零：紅 */
+
+        .btn-label {
+            font-size: 11px;
+            font-weight: bold;
+            color: var(--text-sub);
+            font-family: monospace;
+        }
+
+        /* 儀表板控制端 */
+        .dashboard {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            width: 480px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel-section {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 14px;
+            border: 1px solid #1f2334;
+        }
+
+        .panel-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent-color);
+            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .data-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            border-bottom: 1px dashed #1c2030;
+            padding-bottom: 4px;
+        }
+
+        .data-field:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .field-label { color: var(--text-sub); }
+        .field-value { font-weight: bold; }
+        .val-highlight { color: #3bc5ff; }
+        .val-state { color: #ffbe3b; }
+
+        .val-binary {
+            font-size: 11px;
+            color: #a3be8c;
+            background: #191d2c;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* 模擬加速頻率控制器 */
+        .freq-controller {
+            display: flex;
+            gap: 8px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+        }
+
+        .btn-freq {
+            flex: 1;
+            min-width: 60px;
+            padding: 8px 10px;
+            background-color: #24293f;
+            border: 1px solid #363d5a;
+            color: var(--text-sub);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn-freq.active {
+            background-color: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 10px rgba(82, 139, 255, 0.4);
+        }
+
+        /* 說明圖示 */
+        .info-panel {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text-sub);
+        }
+
+        /* 狀態指示燈 */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #3b4252;
+            display: inline-block;
+        }
+        .status-dot.active {
+            background-color: #2ecc71;
+            box-shadow: 0 0 8px #2ecc71;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>CPLD 簡易數位碼表模擬器</h1>
+        <div class="subtitle">MAX II CPLD 10kHz 固定極速多工掃描（硬體模擬優化版）</div>
+    </header>
+
+    <div class="main-container">
+        <!-- 實體開發板硬體外觀 -->
+        <div class="board-card">
+            <div class="board-title">CPLD Trainer Board (EPM240/EPM1270)</div>
+            
+            <!-- 實體 4-Digit 七段顯示器 -->
+            <div class="display-module">
+                <!-- 第一位 (分十位) -->
+                <div class="digit-container">
+                    <div id="com1-led" class="com-indicator"></div>
+                    <svg class="digit-svg" viewBox="0 0 60 100" id="digit0">
+                        <!-- A --> <path id="d0-segA" class="seg-path" d="M 12,8  L 48,8  L 42,14 L 18,14 Z" />
+                        <!-- B --> <path id="d0-segB" class="seg-path" d="M 49,9  L 49,45 L 43,41 L 43,15 Z" />
+                        <!-- C --> <path id="d0-segC" class="seg-path" d="M 49,51 L 49,87 L 43,81 L 43,55 Z" />
+                        <!-- D --> <path id="d0-segD" class="seg-path" d="M 12,88 L 48,88 L 42,82 L 18,82 Z" />
+                        <!-- E --> <path id="d0-segE" class="seg-path" d="M 11,51 L 11,87 L 17,81 L 17,55 Z" />
+                        <!-- F --> <path id="d0-segF" class="seg-path" d="M 11,9  L 11,45 L 17,41 L 17,15 Z" />
+                        <!-- G --> <path id="d0-segG" class="seg-path" d="M 14,46 L 46,46 L 40,51 L 20,51 L 14,46 Z" />
+                        <!-- DP --><circle id="d0-segDP" class="seg-path" cx="54" cy="88" r="3.5" />
+                    </svg>
+                </div>
+
+                <!-- 第二位 (分個位 - 帶有亮起的點) -->
+                <div class="digit-container">
+                    <div id="com2-led" class="com-indicator"></div>
+                    <svg class="digit-svg" viewBox="0 0 60 100" id="digit1">
+                        <!-- A --> <path id="d1-segA" class="seg-path" d="M 12,8  L 48,8  L 42,14 L 18,14 Z" />
+                        <!-- B --> <path id="d1-segB" class="seg-path" d="M 49,9  L 49,45 L 43,41 L 43,15 Z" />
+                        <!-- C --> <path id="d1-segC" class="seg-path" d="M 49,51 L 49,87 L 43,81 L 43,55 Z" />
+                        <!-- D --> <path id="d1-segD" class="seg-path" d="M 12,88 L 48,88 L 42,82 L 18,82 Z" />
+                        <!-- E --> <path id="d1-segE" class="seg-path" d="M 11,51 L 11,87 L 17,81 L 17,55 Z" />
+                        <!-- F --> <path id="d1-segF" class="seg-path" d="M 11,9  L 11,45 L 17,41 L 17,15 Z" />
+                        <!-- G --> <path id="d1-segG" class="seg-path" d="M 14,46 L 46,46 L 40,51 L 20,51 L 14,46 Z" />
+                        <!-- DP --><circle id="d1-segDP" class="seg-path" cx="54" cy="88" r="3.5" />
+                    </svg>
+                </div>
+
+                <!-- 第三位 (秒十位) -->
+                <div class="digit-container">
+                    <div id="com3-led" class="com-indicator"></div>
+                    <svg class="digit-svg" viewBox="0 0 60 100" id="digit2">
+                        <!-- A --> <path id="d2-segA" class="seg-path" d="M 12,8  L 48,8  L 42,14 L 18,14 Z" />
+                        <!-- B --> <path id="d2-segB" class="seg-path" d="M 49,9  L 49,45 L 43,41 L 43,15 Z" />
+                        <!-- C --> <path id="d2-segC" class="seg-path" d="M 49,51 L 49,87 L 43,81 L 43,55 Z" />
+                        <!-- D --> <path id="d2-segD" class="seg-path" d="M 12,88 L 48,88 L 42,82 L 18,82 Z" />
+                        <!-- E --> <path id="d2-segE" class="seg-path" d="M 11,51 L 11,87 L 17,81 L 17,55 Z" />
+                        <!-- F --> <path id="d2-segF" class="seg-path" d="M 11,9  L 11,45 L 17,41 L 17,15 Z" />
+                        <!-- G --> <path id="d2-segG" class="seg-path" d="M 14,46 L 46,46 L 40,51 L 20,51 L 14,46 Z" />
+                        <!-- DP --><circle id="d2-segDP" class="seg-path" cx="54" cy="88" r="3.5" />
+                    </svg>
+                </div>
+
+                <!-- 第四位 (秒個位) -->
+                <div class="digit-container">
+                    <div id="com4-led" class="com-indicator"></div>
+                    <svg class="digit-svg" viewBox="0 0 60 100" id="digit3">
+                        <!-- A --> <path id="d3-segA" class="seg-path" d="M 12,8  L 48,8  L 42,14 L 18,14 Z" />
+                        <!-- B --> <path id="d3-segB" class="seg-path" d="M 49,9  L 49,45 L 43,41 L 43,15 Z" />
+                        <!-- C --> <path id="d3-segC" class="seg-path" d="M 49,51 L 49,87 L 43,81 L 43,55 Z" />
+                        <!-- D --> <path id="d3-segD" class="seg-path" d="M 12,88 L 48,88 L 42,82 L 18,82 Z" />
+                        <!-- E --> <path id="d3-segE" class="seg-path" d="M 11,51 L 11,87 L 17,81 L 17,55 Z" />
+                        <!-- F --> <path id="d3-segF" class="seg-path" d="M 11,9  L 11,45 L 17,41 L 17,15 Z" />
+                        <!-- G --> <path id="d3-segG" class="seg-path" d="M 14,46 L 46,46 L 40,51 L 20,51 L 14,46 Z" />
+                        <!-- DP --><circle id="d3-segDP" class="seg-path" cx="54" cy="88" r="3.5" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 實體微動按鍵組 (SW1, SW2, SW3) -->
+            <div class="buttons-section">
+                <!-- S1: 開始/繼續 -->
+                <div class="tactile-button-wrapper">
+                    <div id="btn-sw1" class="tactile-button btn-s1" onmousedown="pressBtn(1)" onmouseup="releaseBtn(1)" onmouseleave="releaseBtn(1)" ontouchstart="pressBtn(1)" ontouchend="releaseBtn(1)"></div>
+                    <span class="btn-label">SW1 (S1)</span>
+                    <span class="btn-label" style="font-size:9px; color:#528bff;">開始/繼續</span>
+                </div>
+
+                <!-- S2: 暫停 -->
+                <div class="tactile-button-wrapper">
+                    <div id="btn-sw2" class="tactile-button btn-s2" onmousedown="pressBtn(2)" onmouseup="releaseBtn(2)" onmouseleave="releaseBtn(2)" ontouchstart="pressBtn(2)" ontouchend="releaseBtn(2)"></div>
+                    <span class="btn-label">SW2 (S2)</span>
+                    <span class="btn-label" style="font-size:9px; color:#f1c40f;">暫停運行</span>
+                </div>
+
+                <!-- S3: 強制歸零 -->
+                <div class="tactile-button-wrapper">
+                    <div id="btn-sw3" class="tactile-button btn-s3" onmousedown="pressBtn(3)" onmouseup="releaseBtn(3)" onmouseleave="releaseBtn(3)" ontouchstart="pressBtn(3)" ontouchend="releaseBtn(3)"></div>
+                    <span class="btn-label">SW3 (S3)</span>
+                    <span class="btn-label" style="font-size:9px; color:#e74c3c;">強制歸零</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：暫存器與硬體核心監測 -->
+        <div class="dashboard">
+            <!-- 模擬時脈倍速控制器 -->
+            <div class="panel-section" style="border-left: 4px solid var(--accent-color);">
+                <div class="panel-section-title">⏱️ 模擬時脈加速控制 (Speed Multiplier)</div>
+                <div class="freq-controller">
+                    <button id="speed-1" class="btn-freq active" onclick="setSpeed(1)">1x (正常)</button>
+                    <button id="speed-5" class="btn-freq" onclick="setSpeed(5)">5x (快速)</button>
+                    <button id="speed-60" class="btn-freq" onclick="setSpeed(60)">60x (分針速)</button>
+                    <button id="speed-600" class="btn-freq" onclick="setSpeed(600)">600x (超速)</button>
+                    <button id="speed-3600" class="btn-freq" onclick="setSpeed(3600)">3600x (極速)</button>
+                </div>
+                <div class="info-panel" style="margin-top: 10px;">
+                    💡 <b>提示：</b>多工掃描已鎖定在 <b>10kHz (POV 視覺暫留)</b> 以獲得完美無閃爍的顯示。您可以利用上方加速按鈕，快速讓碼表進位，極速測試 <b>59:59</b> 自動暫停與歸零功能！
+                </div>
+            </div>
+
+            <!-- FSM 控制暫存器 -->
+            <div class="panel-section">
+                <div class="panel-section-title">
+                    <span id="clk-active-dot" class="status-dot"></span>
+                    有限狀態機 (FSM)
+                </div>
+                <div class="data-grid">
+                    <div class="data-field">
+                        <span class="field-label">目前狀態 (current_state):</span>
+                        <span id="reg-current-state" class="field-value val-state">00 (STATE_IDLE)</span>
+                    </div>
+                    <div class="data-field">
+                        <span class="field-label">下一狀態 (next_state):</span>
+                        <span id="reg-next-state" class="field-value val-state">00 (STATE_IDLE)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 內部變數暫存器 -->
+            <div class="panel-section">
+                <div class="panel-section-title">內部資料暫存器 (Registers)</div>
+                <div class="data-grid">
+                    <div class="data-field">
+                        <span class="field-label">1Hz 降頻器 (clk_div_count_10k):</span>
+                        <span id="reg-div-count" class="field-value val-highlight">0000 / 9999</span>
+                    </div>
+                    <div class="data-field">
+                        <span class="field-label">降頻二進位:</span>
+                        <span id="reg-div-bin" class="field-value val-binary">14'b00000000000000</span>
+                    </div>
+                    <div class="data-field" style="border-top:1px solid #1f2334; padding-top:6px; margin-top:4px;">
+                        <span class="field-label">時間暫存器 (分十位 m_ten):</span>
+                        <span id="reg-m-ten" class="field-value">0</span>
+                    </div>
+                    <div class="data-field">
+                        <span class="field-label">時間暫存器 (分個位 m_one):</span>
+                        <span id="reg-m-one" class="field-value">0</span>
+                    </div>
+                    <div class="data-field">
+                        <span class="field-label">時間暫存器 (秒十位 s_ten):</span>
+                        <span id="reg-s-ten" class="field-value">0</span>
+                    </div>
+                    <div class="data-field">
+                        <span class="field-label">時間暫存器 (秒個位 s_one):</span>
+                        <span id="reg-s-one" class="field-value">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 實體輸出 I/O Wires 狀態 -->
+            <div class="panel-section" style="border-left: 4px solid #a3be8c;">
+                <div class="panel-section-title" style="color: #a3be8c;">實體晶片 I/O 接腳輸出 (Pins)</div>
+                <div class="data-grid">
+                    <div class="data-field">
+                        <span class="field-label">4位共陽極選擇引腳 (com[3:0]):</span>
+                        <span id="pin-com" class="field-value val-binary">4'b1111</span>
+                    </div>
+                    <div class="data-field" style="font-size:11px; color:var(--text-sub);">
+                        <span>(COM1~COM4) 0為選中導通，1為截止</span>
+                    </div>
+                    <div class="data-field" style="border-top:1px dashed #1c2030; padding-top:6px; margin-top:4px;">
+                        <span class="field-label">段控制引腳 (seg[7:0]):</span>
+                        <span id="pin-seg" class="field-value val-binary">8'b11111111</span>
+                    </div>
+                    <div class="data-field" style="font-size:11px; color:var(--text-sub);">
+                        <span>排列：{A, B, C, D, E, F, G, DOT} 0為點亮，1為熄滅</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // CPLD 內部硬體暫存器配置 (同 Verilog 完全一致)
+        // ============================================================
+        let current_state = 0;  // localparam STATE_IDLE = 2'b00;
+        let next_state = 0;
+        
+        const STATE_IDLE  = 0;
+        const STATE_RUN   = 1;
+        const STATE_PAUSE = 2;
+
+        let clk_div_count_10k = 0; // reg [13:0] clk_div_count_10k
+
+        // 時間儲存暫存器 (BCD 碼)
+        let s_one = 0;
+        let s_ten = 0;
+        let m_one = 0;
+        let m_ten = 0;
+
+        // 按鍵緩衝移位暫存器 (負邏輯，平時為1，按下為0)
+        let sw1_shift = 3; // 2'b11
+        let sw2_shift = 3; // 2'b11
+        let sw3_shift = 3; // 2'b11
+
+        // 外部實體按鍵控制
+        let sw1 = 1; 
+        let sw2 = 1; 
+        let sw3 = 1; 
+
+        // 掃描與動態多工暫存器
+        let scan_div = 0;   // reg [5:0] scan_div
+        let scan_count = 0; // reg [1:0] scan_count
+        let com = 15;       // output reg [3:0] com
+        let seg = 255;      // output reg [7:0] seg
+        
+        // 模擬控制
+        let speedMultiplier = 1; // 加速倍率 (1x, 5x, 60x, 600x, 3600x)
+        let lastTime = performance.now();
+        let tickAccumulator = 0;
+
+        // 固定極速 10,000Hz (配合 clk_div_count_10k 除以 10000 得到 1Hz)
+        const targetFreq = 10000; 
+
+        // ============================================================
+        // 核心硬體邏輯：單個 posedge clk_1khz 脈衝運算
+        // ============================================================
+        function cpld_clock_tick() {
+            // 3. 負邏輯去彈跳與邊緣檢測
+            // 每次時脈正邊緣，移位暫存器更新
+            sw1_shift = ((sw1_shift << 1) & 0x03) | sw1;
+            sw2_shift = ((sw2_shift << 1) & 0x03) | sw2;
+            sw3_shift = ((sw3_shift << 1) & 0x03) | sw3;
+
+            // 負邏輯邊緣：原本為1 (shift[1]==1) 且現在變為0 (shift[0]==0)
+            let sw1_pressed = ((sw1_shift & 2) === 2 && (sw1_shift & 1) === 0);
+            let sw2_pressed = ((sw2_shift & 2) === 2 && (sw2_shift & 1) === 0);
+            let sw3_pressed = ((sw3_shift & 2) === 2 && (sw3_shift & 1) === 0);
+
+            // 4. 有限狀態機主邏輯
+            if (sw3_pressed) {
+                current_state = STATE_IDLE;
+            } else {
+                current_state = next_state;
+            }
+
+            // FSM 組合電路狀態轉移
+            next_state = current_state;
+            switch(current_state) {
+                case STATE_IDLE:
+                    if (sw1_pressed) next_state = STATE_RUN;
+                    break;
+                case STATE_RUN:
+                    if (sw2_pressed) {
+                        next_state = STATE_PAUSE;
+                    } else if (m_ten === 5 && m_one === 9 && s_ten === 5 && s_one === 9) {
+                        next_state = STATE_PAUSE; // 59:59 自動暫停
+                    }
+                    break;
+                case STATE_PAUSE:
+                    if (sw1_pressed) next_state = STATE_RUN;
+                    break;
+                default:
+                    next_state = STATE_IDLE;
+            }
+
+            // 5. 1Hz 時脈產生與進位
+            let tick_1hz = (current_state === STATE_RUN && clk_div_count_10k === 9999);
+
+            if (current_state === STATE_IDLE) {
+                clk_div_count_10k = 0;
+                s_one = 0;
+                s_ten = 0;
+                m_one = 0;
+                m_ten = 0;
+            } else {
+                if (current_state === STATE_RUN) {
+                    if (clk_div_count_10k >= 9999) {
+                        clk_div_count_10k = 0;
+                    } else {
+                        clk_div_count_10k++;
+                    }
+                }
+
+                // 時間進位邏輯 (與 Verilog 巢狀 BCD 完全同步)
+                if (tick_1hz) {
+                    if (s_one === 9) {
+                        s_one = 0;
+                        if (s_ten === 5) {
+                            s_ten = 0;
+                            if (m_one === 9) {
+                                m_one = 0;
+                                if (m_ten === 5) {
+                                    m_ten = 5; // 達到極限鎖定 (FSM會同時停在PAUSE)
+                                } else {
+                                    m_ten++;
+                                }
+                            } else {
+                                m_one++;
+                            }
+                        } else {
+                            s_ten++;
+                        }
+                    } else {
+                        s_one++;
+                    }
+                }
+            }
+
+            // 6. 七段顯示器動態掃描 (降頻計數器與多工切換)
+            scan_div = (scan_div + 1) & 0x3F; // 6-bit counter (0~63)
+            if (scan_div === 0) {
+                scan_count = (scan_count + 1) & 0x03; // 2-bit counter (0~3)
+            }
+
+            let current_digit_bcd = 0;
+            let current_dot = 1; // 共陽極高電位不亮
+
+            // 針對共陽極：選中的位數給 0，沒選中的給 1
+            switch(scan_count) {
+                case 0:
+                    com = 0b0111; // COM1 導通 (分十位)
+                    current_digit_bcd = m_ten;
+                    current_dot = 1;
+                    break;
+                case 1:
+                    com = 0b1011; // COM2 導通 (分個位)
+                    current_digit_bcd = m_one;
+                    current_dot = 0; // 第二位小數點強制點亮導通
+                    break;
+                case 2:
+                    com = 0b1101; // COM3 導通 (秒十位)
+                    current_digit_bcd = s_ten;
+                    current_dot = 1;
+                    break;
+                case 3:
+                    com = 0b1110; // COM4 導通 (秒個位)
+                    current_digit_bcd = s_one;
+                    current_dot = 1;
+                    break;
+            }
+
+            // 7. 解碼解譯：共陽極標準 0 亮、1 滅
+            let seg_bits = 0b1111111;
+            switch(current_digit_bcd) {
+                case 0: seg_bits = 0b0000001; break;
+                case 1: seg_bits = 0b1001111; break;
+                case 2: seg_bits = 0b0010010; break;
+                case 3: seg_bits = 0b0000110; break;
+                case 4: seg_bits = 0b1001100; break;
+                case 5: seg_bits = 0b0100100; break;
+                case 6: seg_bits = 0b0100000; break;
+                case 7: seg_bits = 0b0001111; break;
+                case 8: seg_bits = 0b0000000; break;
+                case 9: seg_bits = 0b0000100; break;
+                default: seg_bits = 0b1111111;
+            }
+
+            // 組合 output reg [7:0] seg => {A,B,C,D,E,F,G,DOT}
+            seg = (seg_bits << 1) | current_dot;
+        }
+
+        // ============================================================
+        // 視覺化渲染引擎與模擬運作
+        // ============================================================
+        
+        // 視覺暫留（POV）累加法，模擬高速多工掃描下的穩定發光
+        let povAccumulatedSegments = [255, 255, 255, 255]; 
+
+        function runMainCycle(now) {
+            // 利用 speedMultiplier 將實際經歷的時間 dt 按比例放大，實現精準時脈級加速
+            let dt = (now - lastTime) * speedMultiplier;
+            if (dt > 100 * speedMultiplier) dt = 100 * speedMultiplier; // 避免切換分頁延遲導致時間爆衝
+
+            tickAccumulator += dt;
+            const msPerTick = 1000 / targetFreq; // 10kHz 下 0.1 毫秒為 1 個 clock tick
+
+            while (tickAccumulator >= msPerTick) {
+                cpld_clock_tick();
+                
+                // 記錄下高速掃描時，各數位 COM 導通時的 SEG 解碼狀態
+                for (let i = 0; i < 4; i++) {
+                    let targetCom = ~(1 << (3 - i)) & 0x0F; 
+                    if (com === targetCom) {
+                        povAccumulatedSegments[i] = seg;
+                    }
+                }
+                
+                tickAccumulator -= msPerTick;
+            }
+
+            // 更新 UI 渲染
+            renderBoardUI();
+
+            lastTime = now;
+            requestAnimationFrame(runMainCycle);
+        }
+
+        function renderBoardUI() {
+            // FSM 顯示更新
+            const stateNames = ["00 (STATE_IDLE)", "01 (STATE_RUN)", "10 (STATE_PAUSE)"];
+            document.getElementById("reg-current-state").innerText = stateNames[current_state];
+            document.getElementById("reg-next-state").innerText = stateNames[next_state];
+
+            // CLK 動態燈
+            const clkDot = document.getElementById("clk-active-dot");
+            if (current_state === STATE_RUN && (clk_div_count_10k % 500 < 250)) {
+                clkDot.classList.add("active");
+            } else {
+                clkDot.classList.remove("active");
+            }
+
+            // 暫存器觀測窗
+            document.getElementById("reg-div-count").innerText = `${clk_div_count_10k.toString().padStart(4, '0')} / 9999`;
+            document.getElementById("reg-div-bin").innerText = `14'b${clk_div_count_10k.toString(2).padStart(14, '0')}`;
+            document.getElementById("reg-m-ten").innerText = m_ten;
+            document.getElementById("reg-m-one").innerText = m_one;
+            document.getElementById("reg-s-ten").innerText = s_ten;
+            document.getElementById("reg-s-one").innerText = s_one;
+
+            // 實體 Pins 輸出
+            document.getElementById("pin-com").innerText = `4'b${com.toString(2).padStart(4, '0')}`;
+            document.getElementById("pin-seg").innerText = `8'b${seg.toString(2).padStart(8, '0')}`;
+
+            // --------------------------------------------------------
+            // 七段顯示器實體發光渲染 (穩定 POV 模式)
+            // --------------------------------------------------------
+            for (let i = 0; i < 4; i++) {
+                drawSegmentGlow(i, povAccumulatedSegments[i]);
+                document.getElementById(`com${i+1}-led`).classList.add("active");
+            }
+        }
+
+        // 輔助函式：根據 8 位元二進位 {A, B, C, D, E, F, G, DOT} 渲染特定 Digit 的 SVG 發光
+        // 共陽極邏輯：0 代表點亮，1 代表熄滅
+        function drawSegmentGlow(digitIdx, segByte) {
+            const segMap = {
+                'segA':  (segByte & 128) === 0, // bit 7
+                'segB':  (segByte & 64) === 0,  // bit 6
+                'segC':  (segByte & 32) === 0,  // bit 5
+                'segD':  (segByte & 16) === 0,  // bit 4
+                'segE':  (segByte & 8) === 0,   // bit 3
+                'segF':  (segByte & 4) === 0,   // bit 2
+                'segG':  (segByte & 2) === 0,   // bit 1
+                'segDP': (segByte & 1) === 0    // bit 0 (DOT)
+            };
+
+            for (const [segName, isActive] of Object.entries(segMap)) {
+                const el = document.getElementById(`d${digitIdx}-${segName}`);
+                if (isActive) {
+                    el.classList.add("active");
+                } else {
+                    el.classList.remove("active");
+                }
+            }
+        }
+
+        // ============================================================
+        // 互動與控制
+        // ============================================================
+
+        // 實體微動按鍵按下 (負邏輯按鍵，按下時為0)
+        function pressBtn(btnNum) {
+            if (btnNum === 1) { sw1 = 0; document.getElementById("btn-sw1").classList.add("pressed"); }
+            if (btnNum === 2) { sw2 = 0; document.getElementById("btn-sw2").classList.add("pressed"); }
+            if (btnNum === 3) { sw3 = 0; document.getElementById("btn-sw3").classList.add("pressed"); }
+        }
+
+        // 微動按鍵釋放 (平時恢復為1)
+        function releaseBtn(btnNum) {
+            if (btnNum === 1) { sw1 = 1; document.getElementById("btn-sw1").classList.remove("pressed"); }
+            if (btnNum === 2) { sw2 = 1; document.getElementById("btn-sw2").classList.remove("pressed"); }
+            if (btnNum === 3) { sw3 = 1; document.getElementById("btn-sw3").classList.remove("pressed"); }
+        }
+
+        // 模擬速度切換
+        function setSpeed(multiplier) {
+            speedMultiplier = multiplier;
+            
+            // 移除所有按鈕的 active class
+            document.querySelectorAll(".btn-freq").forEach(btn => {
+                btn.classList.remove("active");
+            });
+            
+            // 為被點擊的按鈕加入 active class
+            document.getElementById(`speed-${multiplier}`).classList.add("active");
+            
+            // 重置暫存顯示與計時
+            povAccumulatedSegments = [255, 255, 255, 255];
+            lastTime = performance.now();
+        }
+
+        // 啟動主時脈模擬
+        requestAnimationFrame(runMainCycle);
+    </script>
+</body>
+</html>
